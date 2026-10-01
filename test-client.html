@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bedrock Low-Cost Chat Demo</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  #endpoint { width: 100%; padding: 8px; margin-bottom: 16px; box-sizing: border-box; }
+  #log { border: 1px solid #ddd; border-radius: 8px; padding: 12px; height: 400px; overflow-y: auto; margin-bottom: 12px; }
+  .msg { margin: 8px 0; padding: 8px 12px; border-radius: 8px; max-width: 80%; }
+  .user { background: #d6e8ff; margin-left: auto; text-align: right; }
+  .assistant { background: #f0f0f0; }
+  .meta { font-size: 11px; color: #888; margin-top: 4px; }
+  form { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; padding: 10px; }
+  button { padding: 10px 16px; }
+</style>
+</head>
+<body>
+  <h2>Bedrock Low-Cost Chat Demo</h2>
+  <label for="endpoint">API endpoint (from <code>terraform output chat_endpoint</code>):</label>
+  <input id="endpoint" type="text" placeholder="https://xxxx.execute-api.us-east-1.amazonaws.com/chat">
+
+  <div id="log"></div>
+
+  <form id="chat-form">
+    <input id="message" type="text" placeholder="Type a message..." autocomplete="off" required>
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    const history = [];
+    const logEl = document.getElementById('log');
+    const form = document.getElementById('chat-form');
+    const endpointEl = document.getElementById('endpoint');
+    const messageEl = document.getElementById('message');
+
+    function appendMessage(role, text, meta) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = text;
+      if (meta) {
+        const m = document.createElement('div');
+        m.className = 'meta';
+        m.textContent = meta;
+        div.appendChild(m);
+      }
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const endpoint = endpointEl.value.trim();
+      const message = messageEl.value.trim();
+      if (!endpoint || !message) return;
+
+      appendMessage('user', message);
+      history.push({ role: 'user', content: message });
+      messageEl.value = '';
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, history: history.slice(0, -1) })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          appendMessage('assistant', 'Error: ' + (data.error || res.statusText));
+          return;
+        }
+        appendMessage('assistant', data.reply, `${data.model} · in:${data.usage.inputTokens} out:${data.usage.outputTokens} tokens`);
+        history.push({ role: 'assistant', content: data.reply });
+      } catch (err) {
+        appendMessage('assistant', 'Network error: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
